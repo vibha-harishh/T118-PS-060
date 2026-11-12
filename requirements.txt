@@ -1,0 +1,11 @@
+# Python 3.10+ standard library modules are leveraged for zero-dependency native execution:
+# - sqlite3 (Database with foreign-key constraints)
+# - decimal (High-precision monetary calculations)
+# - csv (Dataset and report ingestion/export)
+# - http.server, socketserver (Multi-threaded REST API server)
+# - unittest (Automated edge-case test suite)
+# - datetime, re, urllib.parse
+
+# Optional packages for external FastAPI deployment:
+fastapi>=0.110.0
+uvicorn>=0.28.0

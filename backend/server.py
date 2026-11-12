@@ -100,7 +100,7 @@ class PayoutAPIHandler(BaseHTTPRequestHandler):
                 ledger_count = cursor.fetchone()["cnt"]
 
                 # Preloaded files check
-                asset_dir = "/app/applet/public/assets/aistudio"
+                asset_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "public", "assets", "aistudio"))
                 has_preloaded_partners = os.path.exists(os.path.join(asset_dir, "partners_76ec20c2.csv"))
                 has_preloaded_slots = os.path.exists(os.path.join(asset_dir, "slots_c936832b.csv"))
                 has_preloaded_commands = os.path.exists(os.path.join(asset_dir, "commands_11750b4b.txt"))
@@ -322,7 +322,7 @@ class PayoutAPIHandler(BaseHTTPRequestHandler):
 
             # 2. Ingest Preloaded Datasets
             elif path == "/api/ingest/preloaded":
-                asset_dir = "/app/applet/public/assets/aistudio"
+                asset_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "public", "assets", "aistudio"))
                 partners_path = os.path.join(asset_dir, "partners_76ec20c2.csv")
                 slots_path = os.path.join(asset_dir, "slots_c936832b.csv")
 
@@ -363,7 +363,7 @@ class PayoutAPIHandler(BaseHTTPRequestHandler):
 
             # 6. Execute Preloaded Commands file
             elif path == "/api/commands/execute-preloaded":
-                asset_dir = "/app/applet/public/assets/aistudio"
+                asset_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "public", "assets", "aistudio"))
                 cmd_path = os.path.join(asset_dir, "commands_11750b4b.txt")
                 with open(cmd_path, "r", encoding="utf-8") as f:
                     content = f.read()
@@ -397,7 +397,65 @@ class PayoutAPIHandler(BaseHTTPRequestHandler):
 
         except Exception as e:
             self._send_json(500, {"error": str(e)})
+def load_preloaded_task_events():
+    """Load official task events once, only when the task table is empty."""
+    asset_dir = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "public",
+            "assets",
+            "aistudio"
+        )
+    )
+    task_path = os.path.join(asset_dir, "task_events.csv")
 
+    if not os.path.exists(task_path):
+        raise FileNotFoundError(
+            f"Task dataset not found: {task_path}"
+        )
+
+    with transaction() as conn:
+        task_count = conn.execute(
+            "SELECT COUNT(*) FROM task_events"
+        ).fetchone()[0]
+
+        if task_count > 0:
+            print(
+                f"[PayoutEngine] Task events already loaded: "
+                f"{task_count}. Skipping import."
+            )
+            return
+
+        partner_count = conn.execute(
+            "SELECT COUNT(*) FROM partners"
+        ).fetchone()[0]
+
+        slot_count = conn.execute(
+            "SELECT COUNT(*) FROM slots"
+        ).fetchone()[0]
+
+        if partner_count == 0 or slot_count == 0:
+            raise RuntimeError(
+                "Partners or slots are missing. "
+                "Cannot safely import task events."
+            )
+
+        with open(task_path, "r", encoding="utf-8") as file:
+            result = ingest_task_events_csv(conn, file.read())
+
+        if result["errors"]:
+            raise RuntimeError(
+                f"Task import failed. "
+                f"{len(result['errors'])} row errors. "
+                f"First errors: {result['errors'][:5]}"
+            )
+
+        print(
+            f"[PayoutEngine] Task events imported: "
+            f"{result['successful']} successful, "
+            f"{result['duplicates_skipped']} duplicates skipped."
+        )
 def start_server():
     init_db(drop_all=False)
     server_address = ("0.0.0.0", PORT)

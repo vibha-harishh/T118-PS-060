@@ -4,8 +4,16 @@ import os
 from typing import Generator
 from contextlib import contextmanager
 
+
 def get_db_path() -> str:
-    return os.environ.get("SQLITE_DB_PATH", "/app/applet/payout_engine.db")
+    default_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "payout_engine.db"
+    )
+    db_path = os.environ.get("SQLITE_DB_PATH", default_path)
+    os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+    return db_path
+
 
 def get_db_connection() -> sqlite3.Connection:
     """Create a SQLite connection with foreign keys and row factory."""
